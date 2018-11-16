@@ -1,0 +1,15 @@
+<launch>
+
+  <include file="$(find cvg_sim_gazebo)/launch/ardrone_testworld.launch">
+  </include>
+
+  <include file="$(find ardrone_joystick)/launch/teleop.launch">
+  </include>
+
+  <node pkg="gps_common" name="gps_conversion" type="utm_odometry_node">
+  </node>
+
+  <node pkg="image_processing" name="image_reformat" type="image_reformat.py">
+  </node>
+
+</launch>
