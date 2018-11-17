@@ -1,0 +1,27 @@
+image: ros:kinetic-ros-core
+
+variables:
+  # If package name is "ros-kinetic-actionlib" it becomes "actionlib" (remove the prefix)
+  ROS_PACKAGES_TO_INSTALL: "common-gps" "std_msgs" "roscpp" "rospy" "geometric_msgs" "std_srvs" "hector*" "gazebo" "tf" "rviz"  # Here the package is useless, it is just for demonstration
+
+before_script:
+  - git clone https://gitlab.com/VictorLamoine/ros_gitlab_ci.git
+  - source ros_gitlab_ci/gitlab-ci.bash >/dev/null
+
+cache:
+  paths:
+    - ccache/
+
+# Tests for Kinetic
+kinetic-catkin_make:
+  image: ros:kinetic-ros-core
+  stage: build
+  script:
+    - catkin_make
+
+kinetic-catkin_build:
+  image: ros:kinetic-ros-core
+  stage: build
+  script:
+    - catkin build --summarize --no-status --force-color
+
