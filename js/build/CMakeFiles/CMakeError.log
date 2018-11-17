@@ -1,0 +1,59 @@
+Determining if the pthread_create exist failed with the following output:
+Change Dir: /home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/make" "cmTC_3307c/fast"
+make[1]: Entering directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+/usr/bin/make -f CMakeFiles/cmTC_3307c.dir/build.make CMakeFiles/cmTC_3307c.dir/build
+make[2]: Entering directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_3307c.dir/CheckSymbolExists.c.o
+/usr/bin/cc     -o CMakeFiles/cmTC_3307c.dir/CheckSymbolExists.c.o   -c /home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+Linking C executable cmTC_3307c
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_3307c.dir/link.txt --verbose=1
+/usr/bin/cc       CMakeFiles/cmTC_3307c.dir/CheckSymbolExists.c.o  -o cmTC_3307c -rdynamic 
+CMakeFiles/cmTC_3307c.dir/CheckSymbolExists.c.o: In function `main':
+CheckSymbolExists.c:(.text+0x16): undefined reference to `pthread_create'
+collect2: error: ld returned 1 exit status
+CMakeFiles/cmTC_3307c.dir/build.make:97: recipe for target 'cmTC_3307c' failed
+make[2]: *** [cmTC_3307c] Error 1
+make[2]: Leaving directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+Makefile:126: recipe for target 'cmTC_3307c/fast' failed
+make[1]: *** [cmTC_3307c/fast] Error 2
+make[1]: Leaving directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+
+File /home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <pthread.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef pthread_create
+  return ((int*)(&pthread_create))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+
+Determining if the function pthread_create exists in the pthreads failed with the following output:
+Change Dir: /home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/make" "cmTC_90cab/fast"
+make[1]: Entering directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+/usr/bin/make -f CMakeFiles/cmTC_90cab.dir/build.make CMakeFiles/cmTC_90cab.dir/build
+make[2]: Entering directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_90cab.dir/CheckFunctionExists.c.o
+/usr/bin/cc    -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_90cab.dir/CheckFunctionExists.c.o   -c /usr/share/cmake-3.5/Modules/CheckFunctionExists.c
+Linking C executable cmTC_90cab
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_90cab.dir/link.txt --verbose=1
+/usr/bin/cc   -DCHECK_FUNCTION_EXISTS=pthread_create    CMakeFiles/cmTC_90cab.dir/CheckFunctionExists.c.o  -o cmTC_90cab -rdynamic -lpthreads 
+/usr/bin/ld: cannot find -lpthreads
+collect2: error: ld returned 1 exit status
+CMakeFiles/cmTC_90cab.dir/build.make:97: recipe for target 'cmTC_90cab' failed
+make[2]: *** [cmTC_90cab] Error 1
+make[2]: Leaving directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+Makefile:126: recipe for target 'cmTC_90cab/fast' failed
+make[1]: *** [cmTC_90cab/fast] Error 2
+make[1]: Leaving directory '/home/rahul/catkin_ws/devel/ardrone_helpers/ardrone_joystick/build/CMakeFiles/CMakeTmp'
+
+
