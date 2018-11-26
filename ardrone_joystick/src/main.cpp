@@ -52,7 +52,7 @@ struct TeleopArDrone
 	 }
 
 	 // mapping from joystick to velocity
-	 float scale = 10;
+	 float scale = 1;
 
 	 twist.linear.x = scale*joy_msg->axes[1]; // forward, backward
 	 twist.linear.y = scale*joy_msg->axes[0]; // left right
