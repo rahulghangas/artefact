@@ -10,50 +10,55 @@ from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PoseStamped
 import image_geometry as ig
 
-coord = [(7, 7), (5, 3), (-3, -5), (3, -2)]
-
-current_x = float()
-current_y = float()
-
+coord = [(-2, 7), (5, 3), (-3, -5), (3,-2)]
+camera_coords = list()
 drone_camera = ig.PinholeCameraModel()
 
+class Server:
+    def __init__(self):
+        pass
 
-def callback(camera_feed, pose):
-    quaternion = (
-    pose.pose.orientation.x,
-    pose.pose.orientation.y,
-    pose.pose.orientation.z,
-    pose.pose.orientation.w)
+    def callback_pose(self, pose):
+        quaternion = (
+        pose.pose.orientation.x,
+        pose.pose.orientation.y,
+        pose.pose.orientation.z,
+        pose.pose.orientation.w)
 
-    euler = tf_conversions.transformations.euler_from_quaternion(quaternion)
-    camera_matrix = calculate_matrix(pose.pose.position, euler[2], 0, euler[0])
+        euler = tf_conversions.transformations.euler_from_quaternion(quaternion)
+        camera_matrix = calculate_matrix(pose.pose.position, euler[2], 0, euler[0])
 
-    camera_coords = list()
+        new_camera_coords = list()
 
-    for tuple in coord:
-        transformed_matrix = np.array([tuple[0], tuple[1], 0, 1]).dot(camera_matrix)
-        camera_coords.append((transformed_matrix[0], transformed_matrix[1]))
+        for tuple in coord:
+            transformed_matrix = camera_matrix.dot(np.array([(tuple[0]), (tuple[1]), (0), (1)]))
+            new_camera_coords.append((tuple[0], tuple[1], transformed_matrix[0], transformed_matrix[1]))
 
-    bridge = CvBridge()
-    try:
-        cv_image = bridge.imgmsg_to_cv2(camera_feed)
-    except CvBridgeError as e:
-        print(e)
-        raise Exception
+        global camera_coords
+        camera_coords = new_camera_coords
 
-    width, height = cv_image.shape[:2]
 
-    for tuple in camera_coords:
-        pixel_coord = drone_camera.project3dToPixel((tuple[0], tuple[1], 0))
+    def callback_camera(self, camera_feed):
+        bridge = CvBridge()
+        try:
+            cv_image = bridge.imgmsg_to_cv2(camera_feed)
+        except CvBridgeError as e:
+            print(e)
 
-        if pixel_coord[0] < width -1 and pixel_coord[1] < height -1:
-            cv_image = cv.circle(cv_image, (pixel_coord[0], pixel_coord[1]), 3, (0, 0, 255), 3)
+        width, height = cv_image.shape[:2]
+
+        for tuple in camera_coords:
+            pixel_coord = drone_camera.project3dToPixel((tuple[2], 0, tuple[3]))
+
+            if pixel_coord[0] < width -1 and pixel_coord[0] >= 0 and pixel_coord[1] < height -1 and pixel_coord[1] >= 0:
+                cv_image = cv.circle(cv_image, (int(pixel_coord[0]), int(pixel_coord[1])), 3, (0, 0, 255), 3)
+                print("Printed circle at " + str(tuple[0]) + ", " + str(tuple[1]), pixel_coord[0], pixel_coord[1])
         
-        print (tuple[0], tuple[1])
+            print (pixel_coord[0], pixel_coord[1])
 
-    # rospy.loginfo(cv_image)
-    cv.imshow('Drone_camera', cv_image)
-    cv.waitKey(1)
+    #rospy.loginfo(cv_image)
+        cv.imshow('Drone_camera', cv_image)
+        cv.waitKey(1)
 
 
 def calculate_matrix(position, yaw, pitch, roll):
@@ -61,21 +66,23 @@ def calculate_matrix(position, yaw, pitch, roll):
                       (sin(yaw)*cos(pitch), sin(yaw)*sin(pitch)*sin(roll) - cos(yaw)*cos(roll), sin(yaw)*sin(pitch)*cos(roll) + cos(yaw)*sin(roll), 0),
                       (-sin(pitch),         cos(pitch)*sin(roll),                               cos(pitch)*cos(roll),                               0),
                       (position.x,          position.y,                                         position.z,                                         1)])
-    return array
-    # return np.linalg.inv(array)
+    #return array
+    return np.linalg.inv(array.transpose())
 
 
 def listener():
+    server = Server()
     rospy.init_node('image_reformat', anonymous=True)
 
     camera_init_msg = rospy.wait_for_message("ardrone/front/camera_info", CameraInfo)
     drone_camera.fromCameraInfo(camera_init_msg)
 
-    camera_feed = message_filters.Subscriber("ardrone/front/image_raw", Image)
-    pose = message_filters.Subscriber("camera_pose", PoseStamped)
+    rospy.wait_for_message("/camera_pose", PoseStamped)
 
-    ts = message_filters.ApproximateTimeSynchronizer([camera_feed, pose], 20, 0.5, allow_headerless=True)
-    ts.registerCallback(callback)
+    rospy.Subscriber("/ardrone/front/image_raw", Image, server.callback_camera)
+    rospy.Subscriber("/camera_pose", PoseStamped, server.callback_pose)
+
+    #rospy.Subscriber("/ardrone/front/image_raw", Image, callback)
 
     try:
         rospy.spin()
