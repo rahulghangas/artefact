@@ -9,8 +9,14 @@
   <node pkg="gps_common" name="gps_conversion" type="utm_odometry_node">
   </node>
 
-  <!-- <node pkg="image_processing" name="image_reformat" type="image_reformat.py">
+  <node pkg="image_processing" name="drone_tf" type="transform.py">
   </node>
-  -->
+
+  <node pkg="image_processing" name="objects_static" type="static_transforms.py">
+  </node>
+
+  <node pkg="image_processing" name="image_reformat" type="image_reformat.py">
+  </node>
+  
 
 </launch>

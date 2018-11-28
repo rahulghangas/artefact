@@ -1,27 +1,29 @@
 #!/usr/bin/env python
 import rospy
 import message_filters
-from geometry_msgs.msg import PoseStamped
+import tf2_ros
+import geometry_msgs.msg
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 
-pub = rospy.Publisher('camera_pose', PoseStamped, queue_size=10)
-
 
 def callback(position, rotation):
-    t = PoseStamped()
+    br = tf2_ros.TransformBroadcaster()
+    t = geometry_msgs.msg.TransformStamped()
 
     t.header.stamp = rospy.Time.now()
-    t.header.frame_id = "camera"
-    t.pose.position.x = position.pose.pose.position.x
-    t.pose.position.y = position.pose.pose.position.y
-    t.pose.orientation.x = rotation.orientation.x
-    t.pose.orientation.y = rotation.orientation.y
-    t.pose.orientation.z = rotation.orientation.z
-    t.pose.orientation.w = rotation.orientation.w
+    t.header.frame_id = "world"
+    t.child_frame_id = "camera"
+    t.transform.translation.x = position.pose.pose.position.x
+    t.transform.translation.y = position.pose.pose.position.y
+    t.transform.translation.z = position.pose.pose.position.z
+    t.transform.rotation.x = rotation.orientation.x
+    t.transform.rotation.y = rotation.orientation.y
+    t.transform.rotation.z = rotation.orientation.z
+    t.transform.rotation.w = rotation.orientation.w
     # rospy.loginfo(t)
 
-    pub.publish(t)
+    br.sendTransform(t)
 
 
 def camera_pose_node():
