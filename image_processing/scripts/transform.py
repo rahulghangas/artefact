@@ -16,7 +16,7 @@ def callback(position, rotation):
     t.child_frame_id = "camera"
     t.transform.translation.x = position.pose.pose.position.x
     t.transform.translation.y = position.pose.pose.position.y
-    t.transform.translation.z = position.pose.pose.position.z
+    t.transform.translation.z = 0
     t.transform.rotation.x = rotation.orientation.x
     t.transform.rotation.y = rotation.orientation.y
     t.transform.rotation.z = rotation.orientation.z

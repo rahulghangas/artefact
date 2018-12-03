@@ -33,7 +33,7 @@ class Server:
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                 return
 
-            pixel_coord = self.drone_camera.project3dToPixel((-trans.transform.translation.y, 0, trans.transform.translation.x))
+            pixel_coord = self.drone_camera.project3dToPixel((-trans.transform.translation.y, -trans.transform.translation.z, trans.transform.translation.x))
 
             if trans.transform.translation.x >= 0:
                 cv_image = cv.circle(cv_image, (int(pixel_coord[0]), int(pixel_coord[1])), 3, colors[i], 3)
