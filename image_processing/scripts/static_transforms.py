@@ -23,7 +23,7 @@ def static_broadcast():
         t.child_frame_id = "object%s" %str(i)
         t.transform.translation.x = float(coord[i][0])
         t.transform.translation.y = float(coord[i][1])
-        t.transform.translation.z = 0
+        t.transform.translation.z = 0.0
 
         t.transform.rotation.x = 0.0
         t.transform.rotation.y = 0.0
