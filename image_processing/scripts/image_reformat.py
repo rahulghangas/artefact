@@ -18,6 +18,8 @@ img_width = 512
 # Default angles of rotation for cube objects
 phi, theta = 40, 30
 
+bag = dict()
+
 # Global Lock used for Threads. Two vital threads work side by side in this program. The main thread runs the ROS node
 # while a secondary thread renders the camera feed overlaid by 3d objects using OpenGL. The reason why the ros node is
 # not also run from a secondary thread is because the messages sent by the node are raised as standard
@@ -65,33 +67,39 @@ class Server:
         try:
             quad['texture'] = self.bridge.imgmsg_to_cv2(camera_feed)[..., ::-1]
         except:
-            lock.release()
             return
         finally:
             lock.release()
 
-        # global to_draw
-        # to_draw = set()
         for i in range(4):
             try:
                 trans = self.tfBuffer.lookup_transform('camera', 'object%s' % str(i), rospy.Time())
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                 return
 
-            pixel_coord = self.drone_camera.project3dToPixel((-trans.transform.translation.y,
-                                                              -trans.transform.translation.z,
-                                                              trans.transform.translation.x))
+            # pixel_coord = self.drone_camera.project3dToPixel((-trans.transform.translation.y,
+            #                                                   -trans.transform.translation.z,
+            #                                                   trans.transform.translation.x))
 
-            if trans.transform.translation.x >= 0:
-                pass
-                # bag[i]['position'] = (pixel_coord[0] * 2 / float(img_width) - 1.0,
-                #                       pixel_coord[1] * -2 / float(img_height) + 1.0,
-                #                       0.0)
-                # to_draw = (bag[i])
+            # if trans.transform.translation.x >= 0 and pixel_coord:
+            lock.acquire()
+
+            try:
+                bag[i]['view'] = glm.translation(-trans.transform.translation.y, 
+                                                    -trans.transform.translation.z, 
+                                                    -trans.transform.translation.x)
+            finally:
+                lock.release()
+            # else:
+            #     lock.acquire()
+            #     try:
+            #         bag[i]['view'] = glm.translation(0, 0, 10.0)
+            #     finally:
+            #         lock.release()
+                # to_draw_new.add(bag[i])
                 # cv_image = cv.circle(cv_image, (int(pixel_coord[0]), int(pixel_coord[1])), 3, colors[i], 3)
                 # print("Printed circle at " + str(trans.transform.translation.x) + ", " + str(
                 # trans.transform.translation.y), pixel_coord[0], pixel_coord[1])
-
             # print (pixel_coord[0], pixel_coord[1])
 
         # rospy.loginfo(cv_image)
@@ -105,6 +113,9 @@ def listener():
 
     camera_info = rospy.wait_for_message("ardrone/front/camera_info", CameraInfo)
     server.drone_camera.fromCameraInfo(camera_info)
+
+    global projection_matrix
+    projection_matrix = camera_info.P
 
     image_parameter_init_msg = rospy.wait_for_message("ardrone/front/image_raw", Image)
     server.init_camera_parameters(image_parameter_init_msg)
@@ -155,27 +166,28 @@ def opengl():
         }
     """
 
+    x = 0.1
     V = np.zeros(8, [("position", np.float32, 3)])
-    V["position"] = [[1, 1, 1], [-1, 1, 1], [-1, -1, 1], [1, -1, 1],
-                     [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, -1]]
+    V["position"] = [[x*1, x*1, x*1], [x*-1, x*1, x*1], [x*-1, x*-1, x*1], [x*1, x*-1, x*1],
+                     [x*1, x*-1, x*-1], [x*1, x*1, x*-1], [x*-1, x*1, x*-1], [x*-1, x*-1, x*-1]]
     V = V.view(gloo.VertexBuffer)
     I = np.array([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 1,
                   1, 6, 7, 1, 7, 2, 7, 4, 3, 7, 3, 2, 4, 7, 6, 4, 6, 5], dtype=np.uint32)
     I = I.view(gloo.IndexBuffer)
 
-    # for iterator in range(4):
-    cube = gloo.Program(vertex, fragment)
-    cube.bind(V)
-    cube['model'] = np.eye(4, dtype=np.float32)
-    cube['view'] = glm.translation(0, 0, -10)
-    # bag[iterator] = cube
+    for iterator in range(4):
+        cube = gloo.Program(vertex, fragment)
+        cube.bind(V)
+        cube['model'] = np.eye(4, dtype=np.float32)
+        cube['view'] = glm.translation(0, 0, -30)
+        bag[iterator] = cube
 
     global quad
     quad = gloo.Program(vertex2, fragment2, count=4)
     quad['position'] = [(-1, -1, 0), (-1, +1, 0), (+1, -1, 0), (+1, +1, 0)]
     quad['texcoord'] = [(0, 1), (0, 0), (1, 1), (1, 0)]
     quad['texture'] = initial_image[..., ::-1]
-    
+
     window = app.Window(width=img_width, height=img_height, color=(1, 1, 1, 1))
 
     @window.event
@@ -185,31 +197,47 @@ def opengl():
         window.clear()
         gl.glDisable(gl.GL_DEPTH_TEST)
 
-        #try:
+        # try:
         #    quad['texture'] = cam_img_texture
-        #except:
+        # except:
         #    quad['texture'] = cv.imread("/home/rahul/Pictures/GitKraken_001.png")[..., ::-1]
         quad.draw(gl.GL_TRIANGLE_STRIP)
 
         gl.glEnable(gl.GL_DEPTH_TEST)
         # Filled cube
 
-        # for obj in to_draw:
-            # obj['view'] = glm.translation(0, 0, -40)
-        cube.draw(gl.GL_TRIANGLES, I)
+        model = np.eye(4, dtype=np.float32)
+        glm.rotate(model, theta, 0, 0, 1)
+        glm.rotate(model, phi, 0, 1, 0)
+
+        for obj in bag.values():
+            obj.draw(gl.GL_TRIANGLES, I)
+            obj['model'] = model
+
+        # cube.draw(gl.GL_TRIANGLES, I)
 
         # Make cube rotate
         theta += 1.0  # degrees
         phi += 1.0  # degrees
-        model = np.eye(4, dtype=np.float32)
-        glm.rotate(model, theta, 0, 0, 1)
-        glm.rotate(model, phi, 0, 1, 0)
-        cube['model'] = model
+
+
 
     @window.event
     def on_resize(width, height):
-        # for obj in bag.values():
-        cube['projection'] = glm.perspective(45.0, width / float(height), 2.0, 100.0)
+        view_matrix = np.zeros((4,4))
+        view_matrix[0][0] = 2.0 * projection_matrix[0] / img_width
+        view_matrix[1][1] = -2.0 * projection_matrix[5] / img_height
+
+        view_matrix[2][0] = 1.0 - 2.0 * projection_matrix[2] / img_width
+        view_matrix[2][1] = 2.0 * projection_matrix[6] / img_height - 1.0
+        view_matrix[2][2] = (30 + 1) / float(1 - 30)
+        view_matrix[2][3] = -1.0
+
+        view_matrix[3][2] = 2.0 * 30 * 1 / (1 - 30)
+
+        for obj in bag.values():
+            obj['projection'] = view_matrix
+        # print(glm.perspective(45.0, width / float(height), 2.0, 100.0))
 
     @window.event
     def on_init():
