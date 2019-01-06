@@ -15,5 +15,8 @@
 
 # Intellij files
 *idea*
+.idea/
+
+.vscode/
 
 *.*~

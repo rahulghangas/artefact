@@ -134,16 +134,20 @@ def opengl():
     uniform mat4   view;          // View matrix
     uniform mat4   projection;    // Projection matrix
     attribute vec3 position;      // Vertex position
+    attribute vec3 u_color;
+    varying vec3 v_color;
     void main()
     {
+        v_color = u_color;
         gl_Position = projection * view * model * vec4(position,1.0);
     }
     """
 
     fragment = """
+    varying vec3 v_color;
     void main()
     {
-        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        gl_FragColor = vec4(v_color, 1.0);
     }
     """
     vertex2 = """
@@ -171,9 +175,15 @@ def opengl():
     V["position"] = [[x*1, x*1, x*1], [x*-1, x*1, x*1], [x*-1, x*-1, x*1], [x*1, x*-1, x*1],
                      [x*1, x*-1, x*-1], [x*1, x*1, x*-1], [x*-1, x*1, x*-1], [x*-1, x*-1, x*-1]]
     V = V.view(gloo.VertexBuffer)
+    
     I = np.array([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 1,
                   1, 6, 7, 1, 7, 2, 7, 4, 3, 7, 3, 2, 4, 7, 6, 4, 6, 5], dtype=np.uint32)
     I = I.view(gloo.IndexBuffer)
+
+    O = np.array([0,1, 1,2, 2,3, 3,0,
+     4,7, 7,6, 6,5, 5,4,
+     0,5, 1,6, 2,7, 3,4 ], dtype=np.uint32)
+    O = O.view(gloo.IndexBuffer)
 
     for iterator in range(4):
         cube = gloo.Program(vertex, fragment)
@@ -211,7 +221,14 @@ def opengl():
         glm.rotate(model, phi, 0, 1, 0)
 
         for obj in bag.values():
+            obj['u_color'] = 1, 0, 0
             obj.draw(gl.GL_TRIANGLES, I)
+
+            gl.glDepthMask(gl.GL_FALSE)
+            obj['u_color'] = 0, 0, 0
+            obj.draw(gl.GL_LINES, O)
+            gl.glDepthMask(gl.GL_TRUE)
+
             obj['model'] = model
 
         # cube.draw(gl.GL_TRIANGLES, I)
