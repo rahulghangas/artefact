@@ -15,8 +15,8 @@
   <node pkg="image_processing" name="objects_static" type="static_transforms.py">
   </node>
 
-  <!-- <node pkg="image_processing" name="image_reformat" type="image_reformat.py">
-  </node> -->
+  <node pkg="image_processing" name="image_reformat" type="image_reformat.py">
+  </node>
   
 
 </launch>

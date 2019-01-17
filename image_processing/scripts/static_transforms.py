@@ -7,7 +7,7 @@ import tf2_msgs.msg
 import tf2_ros
 import geometry_msgs.msg
 
-coord = [(-2, 7), (5, 3), (-3, -5), (3,-2)]
+coord = [(-2, 7), (5, 3), (3,-2), (-3, -5)]
 
 def static_broadcast():
     rospy.init_node('fixed_tf2_broadcaster')

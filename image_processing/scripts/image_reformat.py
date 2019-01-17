@@ -8,6 +8,7 @@ import image_geometry as ig
 
 from glumpy import app, gl, glm, gloo
 import numpy as np
+from scipy import interpolate
 
 # colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
 
@@ -61,7 +62,7 @@ class Server:
 
     def callback_camera(self, camera_feed):
 
-        global lock, quad
+        global path, lock, quad
 
         lock.acquire()
         try:
@@ -71,25 +72,65 @@ class Server:
         finally:
             lock.release()
 
-        for i in range(4):
+
+        transforms = np.zeros((len(bag),3))
+        for i in range(len(bag)):
             try:
                 trans = self.tfBuffer.lookup_transform('camera', 'object%s' % str(i), rospy.Time())
+                transforms[i] = [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z]
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                 return
 
-            # pixel_coord = self.drone_camera.project3dToPixel((-trans.transform.translation.y,
-            #                                                   -trans.transform.translation.z,
-            #                                                   trans.transform.translation.x))
-
-            # if trans.transform.translation.x >= 0 and pixel_coord:
             lock.acquire()
 
             try:
                 bag[i]['view'] = glm.translation(-trans.transform.translation.y, 
                                                     -trans.transform.translation.z, 
                                                     -trans.transform.translation.x)
+            except:
+                return
             finally:
                 lock.release()
+
+        tck,u_=interpolate.splprep(transforms.T,s=0.0)
+
+        bez_x,bez_y,bez_z = np.array(interpolate.splev(np.linspace(0,1,25*4),tck))
+
+        position = list()
+        last_position = list()
+        side = list()
+
+        for i in range(len(bez_x)):
+            position.append([-bez_y[i], -bez_z[i] + 0.5, -bez_x[i]])
+            position.append([-bez_y[i], -bez_z[i] + 0.5, -bez_x[i]])
+
+            if i ==1:
+                last_position.append([-bez_y[i + 1], -bez_z[i + 1] + 3, -bez_x[i + 1]])
+                last_position.append([-bez_y[i + 1], -bez_z[i + 1] + 3, -bez_x[i + 1]])
+            else:
+                last_position.append([-bez_y[i - 1], -bez_z[i - 1] + 3, -bez_x[i - 1]])
+                last_position.append([-bez_y[i - 1], -bez_z[i - 1] + 3, -bez_x[i - 1]])
+            
+            side.append(1.0)
+            side.append(-1.0)
+
+        lock.acquire()
+        try:
+            path['position'] = position
+            path['last_point'] = last_position
+            path['side'] = side
+        except:
+            return
+        finally:
+            lock.release()
+
+
+            # pixel_coord = self.drone_camera.project3dToPixel((-trans.transform.translation.y,
+            #                                                   -trans.transform.translation.z,
+            #                                                   trans.transform.translation.x))
+
+            # if trans.transform.translation.x >= 0 and pixel_coord:
+            
             # else:
             #     lock.acquire()
             #     try:
@@ -170,6 +211,34 @@ def opengl():
         }
     """
 
+    vertex3 = """
+    attribute vec3 last_point;
+    attribute float side;
+    uniform mat4   projection;    // Projection matrix
+    attribute vec3 position;      // Vertex position
+    attribute vec3 u_color;
+    varying vec3 v_color;
+    void main()
+    {   
+        vec3 line_vec;
+        line_vec = position - last_point;
+        vec3 normal;
+        normal = vec3(0.0, line_vec.y, -line_vec.y*line_vec.y/line_vec.z);
+        normal = normal/(sqrt(normal.y*normal.y + normal.z*normal.z))*0.2*side;
+
+        //position = position + normal;
+
+        mat4 pos;
+        pos[0] = vec4(1.0, 0.0, 0.0, 0.0);
+        pos[1] = vec4(0.0, 1.0, 0.0, 0.0);
+        pos[2] = vec4(0.0, 0.0, 1.0, 0.0);
+        pos[3] = vec4(position.x, position.y, position.z, 1.0);
+
+        v_color = u_color;
+        gl_Position = projection * pos * vec4(side*0.8, 0.0, 0.0, 1.0);
+    }
+    """
+
     x = 0.1
     V = np.zeros(8, [("position", np.float32, 3)])
     V["position"] = [[x*1, x*1, x*1], [x*-1, x*1, x*1], [x*-1, x*-1, x*1], [x*1, x*-1, x*1],
@@ -179,6 +248,13 @@ def opengl():
     I = np.array([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 1,
                   1, 6, 7, 1, 7, 2, 7, 4, 3, 7, 3, 2, 4, 7, 6, 4, 6, 5], dtype=np.uint32)
     I = I.view(gloo.IndexBuffer)
+
+    bezier_I = list()
+    for i in range(0, 4*25*2-2, 2):
+        bezier_I += [i, i+1, i+2]
+        bezier_I += [i+1, i+2, i+3]
+    bezier_I = np.array(bezier_I)
+    bezier_I.view(gloo.IndexBuffer)
 
     O = np.array([0,1, 1,2, 2,3, 3,0,
      4,7, 7,6, 6,5, 5,4,
@@ -197,6 +273,11 @@ def opengl():
     quad['position'] = [(-1, -1, 0), (-1, +1, 0), (+1, -1, 0), (+1, +1, 0)]
     quad['texcoord'] = [(0, 1), (0, 0), (1, 1), (1, 0)]
     quad['texture'] = initial_image[..., ::-1]
+
+    global path
+    path = gloo.Program(vertex3, fragment)
+    path['position'] = np.zeros((4*25*2, 3))
+    path['u_color'] = 1, 0, 0
 
     window = app.Window(width=img_width, height=img_height, color=(1, 1, 1, 1))
 
@@ -231,11 +312,13 @@ def opengl():
 
             obj['model'] = model
 
+        path.draw(gl.GL_TRIANGLES, bezier_I)
+
         # cube.draw(gl.GL_TRIANGLES, I)
 
         # Make cube rotate
-        theta += 1.0  # degrees
-        phi += 1.0  # degrees
+        theta += 2.0  # degrees
+        phi += 2.0  # degrees
 
 
 
@@ -254,6 +337,8 @@ def opengl():
 
         for obj in bag.values():
             obj['projection'] = view_matrix
+
+        path['projection'] = view_matrix
         # print(glm.perspective(45.0, width / float(height), 2.0, 100.0))
 
     @window.event
