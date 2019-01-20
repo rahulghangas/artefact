@@ -100,24 +100,25 @@ class Server:
         last_position = list()
         side = list()
 
-        for i in range(len(bez_x)):
-            position.append([-bez_y[i], -bez_z[i] + 0.5, -bez_x[i]])
-            position.append([-bez_y[i], -bez_z[i] + 0.5, -bez_x[i]])
+        position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
+        position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
+        last_position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
+        last_position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
+        side += [-1.0, 1.0]
 
-            if i ==1:
-                last_position.append([-bez_y[i + 1], -bez_z[i + 1] + 3, -bez_x[i + 1]])
-                last_position.append([-bez_y[i + 1], -bez_z[i + 1] + 3, -bez_x[i + 1]])
-            else:
-                last_position.append([-bez_y[i - 1], -bez_z[i - 1] + 3, -bez_x[i - 1]])
-                last_position.append([-bez_y[i - 1], -bez_z[i - 1] + 3, -bez_x[i - 1]])
-            
-            side.append(1.0)
-            side.append(-1.0)
+        for i in range(1, len(bez_x)):
+            position.append([-bez_y[i], -bez_z[i] + 0.8, -bez_x[i]])
+            position.append([-bez_y[i], -bez_z[i] + 0.8, -bez_x[i]])
+
+            last_position.append([-bez_y[i - 1], -bez_z[i] + 0.8, -bez_x[i - 1]])
+            last_position.append([-bez_y[i - 1], -bez_z[i] + 0.8, -bez_x[i - 1]])
+
+            side += [-1.0, 1.0]
 
         lock.acquire()
         try:
             path['position'] = position
-            path['last_point'] = last_position
+            path['last_position'] = last_position
             path['side'] = side
         except:
             return
@@ -212,7 +213,7 @@ def opengl():
     """
 
     vertex3 = """
-    attribute vec3 last_point;
+    attribute vec3 last_position;
     attribute float side;
     uniform mat4   projection;    // Projection matrix
     attribute vec3 position;      // Vertex position
@@ -221,21 +222,41 @@ def opengl():
     void main()
     {   
         vec3 line_vec;
-        line_vec = position - last_point;
+        line_vec = position - last_position;
         vec3 normal;
-        normal = vec3(0.0, line_vec.y, -line_vec.y*line_vec.y/line_vec.z);
-        normal = normal/(sqrt(normal.y*normal.y + normal.z*normal.z))*0.2*side;
+        // normal = vec3(0.0, line_vec.y, -line_vec.y*line_vec.y/line_vec.z);
+        normal = vec3(-line_vec.z, 0.0, line_vec.x);
+        normal = normal/(sqrt(normal.x*normal.x + normal.z*normal.z))*0.8;
 
-        //position = position + normal;
+        vec3 new_position;
+        new_position = position + normal;
+
+        vec3 new_line_vec;
+        new_line_vec = new_position - last_position;
+
+        float multiplier;
+        multiplier = 1.0;
+        if (-line_vec.x*new_line_vec.y  + line_vec.y*new_line_vec.x < 0.0){
+            if(side == 1.0){
+                multiplier = -1.0;
+            }
+
+        }else{
+            if(side == -1.0){
+                multiplier = -1.0;
+            }
+        }
+
+        new_position = position + normal*multiplier;
 
         mat4 pos;
         pos[0] = vec4(1.0, 0.0, 0.0, 0.0);
         pos[1] = vec4(0.0, 1.0, 0.0, 0.0);
         pos[2] = vec4(0.0, 0.0, 1.0, 0.0);
-        pos[3] = vec4(position.x, position.y, position.z, 1.0);
+        pos[3] = vec4(new_position.x, new_position.y, new_position.z, 1.0);
 
         v_color = u_color;
-        gl_Position = projection * pos * vec4(side*0.8, 0.0, 0.0, 1.0);
+        gl_Position = projection * pos * vec4(0.0, 0.0, 0.0, 1.0);
     }
     """
 
@@ -250,11 +271,19 @@ def opengl():
     I = I.view(gloo.IndexBuffer)
 
     bezier_I = list()
-    for i in range(0, 4*25*2-2, 2):
+    for i in range(4*25*2-2):
         bezier_I += [i, i+1, i+2]
-        bezier_I += [i+1, i+2, i+3]
-    bezier_I = np.array(bezier_I)
+    bezier_I = np.array(bezier_I, dtype=np.uint32)
     bezier_I.view(gloo.IndexBuffer)
+
+    bline_I = list()
+    bline_I += [2, 3]
+    for i in range(2, 4*25*2-2, 2):
+        bline_I += [i, i+2]
+        bline_I += [i+1, i+3]
+
+    bline_I = np.array(bline_I, dtype=np.uint32)
+    bline_I = bline_I.view(gloo.IndexBuffer)
 
     O = np.array([0,1, 1,2, 2,3, 3,0,
      4,7, 7,6, 6,5, 5,4,
@@ -275,9 +304,11 @@ def opengl():
     quad['texture'] = initial_image[..., ::-1]
 
     global path
-    path = gloo.Program(vertex3, fragment)
+    path = gloo.Program(vertex3, fragment, count=4*25*2)
     path['position'] = np.zeros((4*25*2, 3))
-    path['u_color'] = 1, 0, 0
+    path['last_position'] = np.zeros((4*25*2, 3))
+    path['side'] = np.zeros(4*25*2)
+    path['u_color'] = 0, 0.5, 0
 
     window = app.Window(width=img_width, height=img_height, color=(1, 1, 1, 1))
 
@@ -286,39 +317,49 @@ def opengl():
         global phi, theta
 
         window.clear()
-        gl.glDisable(gl.GL_DEPTH_TEST)
 
-        # try:
-        #    quad['texture'] = cam_img_texture
-        # except:
-        #    quad['texture'] = cv.imread("/home/rahul/Pictures/GitKraken_001.png")[..., ::-1]
-        quad.draw(gl.GL_TRIANGLE_STRIP)
+        lock.acquire()
+        try:
+            gl.glDisable(gl.GL_DEPTH_TEST)
 
-        gl.glEnable(gl.GL_DEPTH_TEST)
-        # Filled cube
+            # try:
+            #    quad['texture'] = cam_img_texture
+            # except:
+            #    quad['texture'] = cv.imread("/home/rahul/Pictures/GitKraken_001.png")[..., ::-1]
+            quad.draw(gl.GL_TRIANGLE_STRIP)
 
-        model = np.eye(4, dtype=np.float32)
-        glm.rotate(model, theta, 0, 0, 1)
-        glm.rotate(model, phi, 0, 1, 0)
+            gl.glEnable(gl.GL_DEPTH_TEST)
+            # Filled cube
 
-        for obj in bag.values():
-            obj['u_color'] = 1, 0, 0
-            obj.draw(gl.GL_TRIANGLES, I)
-
+            path['u_color'] = 0, 1, 1
+            path.draw(gl.GL_TRIANGLE_STRIP)
             gl.glDepthMask(gl.GL_FALSE)
-            obj['u_color'] = 0, 0, 0
-            obj.draw(gl.GL_LINES, O)
+            path['u_color'] = 0, 0, 0
+            path.draw(gl.GL_LINES, bline_I)
             gl.glDepthMask(gl.GL_TRUE)
 
-            obj['model'] = model
+            model = np.eye(4, dtype=np.float32)
+            glm.rotate(model, theta, 0, 0, 1)
+            glm.rotate(model, phi, 0, 1, 0)
 
-        path.draw(gl.GL_TRIANGLES, bezier_I)
+            for obj in bag.values():
+                obj['u_color'] = 1, 0, 0
+                obj.draw(gl.GL_TRIANGLES, I)
 
-        # cube.draw(gl.GL_TRIANGLES, I)
+                gl.glDepthMask(gl.GL_FALSE)
+                obj['u_color'] = 0, 0, 0
+                obj.draw(gl.GL_LINES, O)
+                gl.glDepthMask(gl.GL_TRUE)
 
-        # Make cube rotate
-        theta += 2.0  # degrees
-        phi += 2.0  # degrees
+                obj['model'] = model
+
+            # cube.draw(gl.GL_TRIANGLES, I)
+
+            # Make cube rotate
+            theta += 2.0  # degrees
+            phi += 2.0  # degrees
+        finally:
+            lock.release()
 
 
 
@@ -338,6 +379,8 @@ def opengl():
         for obj in bag.values():
             obj['projection'] = view_matrix
 
+        view_matrix[2][2] = (30 + 0.01) / float(0.01 - 30)
+        view_matrix[3][2] = 2.0 * 30 * 0.01 / (0.01 - 30)
         path['projection'] = view_matrix
         # print(glm.perspective(45.0, width / float(height), 2.0, 100.0))
 
