@@ -9,6 +9,8 @@ import image_geometry as ig
 from glumpy import app, gl, glm, gloo
 import numpy as np
 from scipy import interpolate
+from tf.transformations import euler_from_quaternion
+import math
 
 # colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
 
@@ -335,7 +337,9 @@ def opengl():
             path.draw(gl.GL_TRIANGLE_STRIP)
             gl.glDepthMask(gl.GL_FALSE)
             path['u_color'] = 0, 0, 0
+            gl.glLineWidth(10.0)
             path.draw(gl.GL_LINES, bline_I)
+            gl.glLineWidth(1.0)
             gl.glDepthMask(gl.GL_TRUE)
 
             model = np.eye(4, dtype=np.float32)
