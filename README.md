@@ -9,7 +9,7 @@ It aims to improve the flight experience with UAVs by inserting  spatially posit
 	1. ros-kinetic
 	2. Install following packages using terminal
 	```sh
-	$ sudo install python2-pip
+	$ sudo install python-pip
 	$ sudo apt-get install libglfw3-dev libglfw3
 	$ python -m pip install --user numpy scipy matplotlib ipython jupyter pandas sympy nose
 	$ sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
