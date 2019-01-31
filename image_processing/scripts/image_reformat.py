@@ -11,6 +11,7 @@ import numpy as np
 from scipy import interpolate
 from tf.transformations import euler_from_quaternion
 import math
+import tf
 
 # colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
 
@@ -45,6 +46,7 @@ class Server:
         # coordinates to the drone's frame of reference
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
+        self.transformer = tf.TransformerROS()
 
         # A bridging library used to transform ROS images to OpenCV images
         self.bridge = CvBridge()
@@ -76,9 +78,16 @@ class Server:
 
 
         transforms = np.zeros((len(bag),3))
+
+        trans_glob = self.tfBuffer.lookup_transform('camera', 'world', rospy.Time())
+        t = trans_glob.transform.translation
+        r = trans_glob.transform.rotation
+        matrix = self.transformer.fromTranslationRotation((t.x, t.y, t.z), (r.x, r.y, r.z, r.w))
+
+
         for i in range(len(bag)):
             try:
-                trans = self.tfBuffer.lookup_transform('camera', 'object%s' % str(i), rospy.Time())
+                trans = self.tfBuffer.lookup_transform('world', 'object%s' % str(i), rospy.Time())
                 transforms[i] = [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z]
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                 return
@@ -86,15 +95,20 @@ class Server:
             lock.acquire()
 
             try:
-                bag[i]['view'] = glm.translation(-trans.transform.translation.y, 
-                                                    -trans.transform.translation.z, 
-                                                    -trans.transform.translation.x)
+                cam = self.tfBuffer.lookup_transform('camera', 'object%s' % str(i), rospy.Time())
+                # values = matrix.dot(np.array([cam.transform.translation.x, 
+                # cam.transform.translation.y, 
+                # cam.transform.translation.z, 1]))
+
+                bag[i]['view'] = glm.translation(-cam.transform.translation.y, 
+                                                 -cam.transform.translation.z, 
+                                                 -cam.transform.translation.x)
             except:
                 return
             finally:
                 lock.release()
 
-        tck,u_=interpolate.splprep(transforms.T,s=0.0)
+        tck,_=interpolate.splprep(transforms.T,s=0.0)
 
         bez_x,bez_y,bez_z = np.array(interpolate.splev(np.linspace(0,1,25*4),tck))
 
@@ -102,23 +116,25 @@ class Server:
         last_position = list()
         side = list()
 
-        position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
-        position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
-        last_position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
-        last_position.append([-bez_y[1], -bez_z[1] + 0.8, -bez_x[1]])
+        position.append([bez_x[1], bez_y[1], bez_z[1] -0.8])
+        position.append([bez_x[1], bez_y[1], bez_z[1] - 0.8])
+        last_position.append([bez_x[1], bez_y[1], bez_z[1] - 0.8])
+        last_position.append([bez_x[1], bez_y[1], bez_z[1] - 0.8])
         side += [-1.0, 1.0]
 
+        #remember to chaneg values
         for i in range(1, len(bez_x)):
-            position.append([-bez_y[i], -bez_z[i] + 0.8, -bez_x[i]])
-            position.append([-bez_y[i], -bez_z[i] + 0.8, -bez_x[i]])
+            position.append([bez_x[i], bez_y[i], bez_z[i] - 0.8])
+            position.append([bez_x[i], bez_y[i], bez_z[i] - 0.8])
 
-            last_position.append([-bez_y[i - 1], -bez_z[i] + 0.8, -bez_x[i - 1]])
-            last_position.append([-bez_y[i - 1], -bez_z[i] + 0.8, -bez_x[i - 1]])
+            last_position.append([bez_x[i - 1], bez_y[i-1], bez_z[i - 1] - 0.8])
+            last_position.append([bez_x[i - 1], bez_y[i-1], bez_z[i - 1] - 0.8])
 
             side += [-1.0, 1.0]
 
         lock.acquire()
         try:
+            path['inv_transform'] = matrix.T
             path['position'] = position
             path['last_position'] = last_position
             path['side'] = side
@@ -217,7 +233,8 @@ def opengl():
     vertex3 = """
     attribute vec3 last_position;
     attribute float side;
-    uniform mat4   projection;    // Projection matrix
+    uniform mat4 projection;    // Projection matrix
+    uniform mat4 inv_transform; 
     attribute vec3 position;      // Vertex position
     attribute vec3 u_color;
     varying vec3 v_color;
@@ -227,8 +244,8 @@ def opengl():
         line_vec = position - last_position;
         vec3 normal;
         // normal = vec3(0.0, line_vec.y, -line_vec.y*line_vec.y/line_vec.z);
-        normal = vec3(-line_vec.z, 0.0, line_vec.x);
-        normal = normal/(sqrt(normal.x*normal.x + normal.z*normal.z))*0.8;
+        normal = vec3(-line_vec.y, line_vec.x, 0.0);
+        normal = normal/(sqrt(normal.x*normal.x + normal.y*normal.y))*0.8;
 
         vec3 new_position;
         new_position = position + normal;
@@ -250,12 +267,13 @@ def opengl():
         }
 
         new_position = position + normal*multiplier;
+        new_position = (inv_transform * vec4(new_position, 1)).xyz; 
 
         mat4 pos;
         pos[0] = vec4(1.0, 0.0, 0.0, 0.0);
         pos[1] = vec4(0.0, 1.0, 0.0, 0.0);
         pos[2] = vec4(0.0, 0.0, 1.0, 0.0);
-        pos[3] = vec4(new_position.x, new_position.y, new_position.z, 1.0);
+        pos[3] = vec4(-new_position.y, -new_position.z, -new_position.x, 1.0);
 
         v_color = u_color;
         gl_Position = projection * pos * vec4(0.0, 0.0, 0.0, 1.0);
@@ -337,7 +355,7 @@ def opengl():
             path.draw(gl.GL_TRIANGLE_STRIP)
             gl.glDepthMask(gl.GL_FALSE)
             path['u_color'] = 0, 0, 0
-            gl.glLineWidth(10.0)
+            gl.glLineWidth(7.5)
             path.draw(gl.GL_LINES, bline_I)
             gl.glLineWidth(1.0)
             gl.glDepthMask(gl.GL_TRUE)
