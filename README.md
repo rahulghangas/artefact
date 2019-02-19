@@ -25,3 +25,7 @@ It aims to improve the flight experience with UAVs by inserting  spatially posit
 + Run "catkin_build" from workspace root. 
 + To start simulation, "roslaunch sim_launcher sim.launch"
 + To fly quadrotor, plug in an xbox360 or logitech joystick controller.
+
+![Simulation Image](https://gitlab.centralesuepelc.com/pennerath/Artefact/blob/master/resources/index.jpeg)
+![Bebop test image](https://gitlab.centralesuepelc.com/pennerath/Artefact/blob/master/resources/index1.jpeg)
+![Bebop test image2](https://gitlab.centralesuepelc.com/pennerath/Artefact/blob/master/resources/index2.jpeg)
