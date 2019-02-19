@@ -28,4 +28,4 @@ It aims to improve the flight experience with UAVs by inserting  spatially posit
 
 ![](resources/index.jpeg)
 ![](resources/index1.jpeg)
-![](resource/index2.jpeg)
+![](resources/index2.jpeg)
