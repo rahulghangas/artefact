@@ -26,6 +26,6 @@ It aims to improve the flight experience with UAVs by inserting  spatially posit
 + To start simulation, "roslaunch sim_launcher sim.launch"
 + To fly quadrotor, plug in an xbox360 or logitech joystick controller.
 
-![Simulation Image](https://gitlab.centralesupelec.fr/pennerath/Artefact/blob/master/resources/index.jpeg)
-![Bebop test image](https://gitlab.centralesupelec.fr/pennerath/Artefact/blob/master/resources/index1.jpeg)
-![Bebop test image2](https://gitlab.centralesupelec.fr/pennerath/Artefact/blob/master/resources/index2.jpeg)
+![](resources/index.jpeg)
+![](resources/index1.jpeg)
+![](resource/index2.jpeg)
