@@ -22,7 +22,7 @@ It aims to improve the flight experience with UAVs by inserting  spatially posit
 	$ sudo apt install ros-kinetic-hector*
 	```
 + Clone repository to src folder of your workspace
-+ Run "catkin_build" from workspace root. 
++ Run "catkin build" from workspace root. 
 + To start simulation, "roslaunch sim_launcher sim.launch"
 + To fly quadrotor, plug in an xbox360 or logitech joystick controller.
 
