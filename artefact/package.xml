@@ -7,6 +7,7 @@
   <license>BSD</license>
   <buildtool_depend>catkin</buildtool_depend>
   <run_depend>tum_simulator</run_depend>
+<run_depend>bebop_autonomy</run_depend>
   <run_depend>image_processing</run_depend>
   <run_depend>sim_launcher</run_depend>
   <run_depend>ardrone_joystick</run_depend>

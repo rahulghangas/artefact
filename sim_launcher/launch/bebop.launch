@@ -1,0 +1,16 @@
+<launch>
+
+  <include file="$(find bebop_driver)/launch/bebop_node.launch">
+  </include>
+
+  <include file="$(find bebop_tools)/launch/joy_teleop.launch">
+  </include>
+
+  <node pkg="image_processing" name="objects_static" type="static_transforms_bebop.py">
+  </node>
+
+  <node pkg="image_processing" name="image_reformat" type="image_reformat_bebop.py">
+  </node>
+  
+
+</launch>
