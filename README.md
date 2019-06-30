@@ -10,7 +10,7 @@ It aims to improve the flight experience with UAVs by inserting  spatially posit
 	2. Install following packages using terminal
 	```sh
 	$ sudo apt-get install build-essential python-rosdep python-catkin-tools
-	$ sudo install python-pip
+	$ sudo apt install python-pip
 	$ sudo apt-get install libglfw3-dev libglfw3
 	$ python -m pip install --user numpy cython scipy matplotlib ipython jupyter sympy nose 
 	$ sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
