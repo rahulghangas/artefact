@@ -4,6 +4,11 @@ ARTEFACT stands for Augmented Reality Tool Enhancing Flight ACTions.
 It aims to improve the flight experience with UAVs by inserting  spatially positioned objects despite the imprecision of UAV positioning systems.
 
 # Installation guide
++ Download the `install_ARTEFACT.sh` script **ONLY**.
++ Run `chmod +x install_ARTEFACT.sh` to make it executable.
++ Run `./install_ARTEFACT.sh`
+
+**OR**
 
 + Install on target host
 	1. ros-kinetic
@@ -26,9 +31,10 @@ It aims to improve the flight experience with UAVs by inserting  spatially posit
 ```sh
 	$ rosdep update && rosdep install --from-paths src -i
 ```
-+ Run "catkin_make" from workspace root. 
-+ To start simulation, "roslaunch sim_launcher sim.launch" OR
-+ To use with real drone, "roslaunch sim_launcher bebop.launch"
++ Run `catkin build bebop_autonomy`
++ Run `catkin_make` from workspace root. 
++ To start simulation, `roslaunch sim_launcher sim.launch` OR
++ To use with real drone, `roslaunch sim_launcher bebop.launch`
 + To fly quadrotor, plug in an xbox360 or logitech joystick controller.
 
 ![](resources/index.jpeg)
