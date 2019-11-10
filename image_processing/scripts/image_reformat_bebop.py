@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-from threading import Thread, Lock
+import math
+from threading import Lock, Thread
+
+import image_geometry as ig
+import numpy as np
 import rospy
-from sensor_msgs.msg import Image, CameraInfo
 import tf2_ros
 from cv_bridge import CvBridge, CvBridgeError
-import image_geometry as ig
+from scipy import interpolate
+from sensor_msgs.msg import CameraInfo, Image
+from tf.transformations import euler_from_quaternion
 
 from glumpy import app, gl, glm, gloo
-import numpy as np
-from scipy import interpolate
-from tf.transformations import euler_from_quaternion
-import math
 
 # colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
 
@@ -37,7 +38,7 @@ class Server:
     def __init__(self):
 
         # A generalised Pinhole camera model provided by the image_geometry module in ROS. Used as an approximate model
-        # of the drone camera. Should be modified with correct camera parameters before usage. Can be used to do  
+        # of the drone camera. Should be modified with correct camera parameters before usage. Can be used to do
         # 3d projections directly. Currently unused
         self.drone_camera = ig.PinholeCameraModel()
 
@@ -75,7 +76,7 @@ class Server:
         lock.acquire()
         try:
             # try to update background texture or return to ros loop if fails
-            quad['texture'] = self.bridge.imgmsg_to_cv2(camera_feed)
+            quad["texture"] = self.bridge.imgmsg_to_cv2(camera_feed)
         except:
             return
         finally:
@@ -83,30 +84,42 @@ class Server:
 
         # coords_3d is a numpy arraythat is stores 3d_ccordinates of all objects and is later extrapolated to a curve that
         # represents the path
-        coords_3d = np.zeros((len(bag),3))
+        coords_3d = np.zeros((len(bag), 3))
         for i in range(len(bag)):
             try:
                 # get the transform of teh objects w.r.t the drone camera and update coords_3d with the coordinates
-                trans = self.tfBuffer.lookup_transform('camera_base_link', 'object%s' % str(i), rospy.Time())
-                coords_3d[i] = [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z]
-            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                trans = self.tfBuffer.lookup_transform(
+                    "camera_base_link", "object%s" % str(i), rospy.Time()
+                )
+                coords_3d[i] = [
+                    trans.transform.translation.x,
+                    trans.transform.translation.y,
+                    trans.transform.translation.z,
+                ]
+            except (
+                tf2_ros.LookupException,
+                tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException,
+            ):
                 return
 
             lock.acquire()
 
             try:
-                # Define the view matrix of the objects w.r.t the drone camera  
-                bag[i]['view'] = glm.translation(-trans.transform.translation.y, 
-                                                    0.0, 
-                                                    -trans.transform.translation.x)
+                # Define the view matrix of the objects w.r.t the drone camera
+                bag[i]["view"] = glm.translation(
+                    -trans.transform.translation.y, 0.0, -trans.transform.translation.x
+                )
             except:
                 return
             finally:
                 lock.release()
 
         # Interpolate the coordinates in coords 3d to define the curve
-        tck,u_=interpolate.splprep(coords_3d.T,s=0.0)
-        bez_x,bez_y,bez_z = np.array(interpolate.splev(np.linspace(0,1,25*4),tck))
+        tck, u_ = interpolate.splprep(coords_3d.T, s=0.0)
+        bez_x, bez_y, bez_z = np.array(
+            interpolate.splev(np.linspace(0, 1, 25 * 4), tck)
+        )
 
         # Specific index in position defines the current point on the curve
         # Specific index in position defines the previous point on the curve
@@ -121,7 +134,7 @@ class Server:
         last_position.append([-bez_y[1], 0.8, -bez_x[1]])
         last_position.append([-bez_y[1], 0.8, -bez_x[1]])
         side += [-1.0, 1.0]
-        
+
         # For each point on the curve append itself and its predecssor twice, once for each side
         for i in range(1, len(bez_x)):
             position.append([-bez_y[i], 0.8, -bez_x[i]])
@@ -135,9 +148,9 @@ class Server:
         # update the position, last_position and side list to the path object in glumpy
         lock.acquire()
         try:
-            path['position'] = position
-            path['last_position'] = last_position
-            path['side'] = side
+            path["position"] = position
+            path["last_position"] = last_position
+            path["side"] = side
         except:
             return
         finally:
@@ -146,7 +159,7 @@ class Server:
 
 # listener function of the node
 def listener():
-    rospy.init_node('image_reformat', anonymous=True)
+    rospy.init_node("image_reformat", anonymous=True)
 
     # The initialisation and callback functions are encapsulated in a class called Server
     server = Server()
@@ -167,7 +180,7 @@ def listener():
     # Start the opengl thread that runs concurrently to the current (main) thread
     Thread(target=opengl).start()
 
-    # Subscribe to the drone camera image topic 
+    # Subscribe to the drone camera image topic
     rospy.Subscriber("bebop/image_raw", Image, server.callback_camera)
     rospy.spin()
 
@@ -284,52 +297,99 @@ def opengl():
     # Define the vertices and indices for each augmented reality object
     x = 0.1
     V = np.zeros(8, [("position", np.float32, 3)])
-    V["position"] = [[x*1, x*1, x*1], [x*-1, x*1, x*1], [x*-1, x*-1, x*1], [x*1, x*-1, x*1],
-                     [x*1, x*-1, x*-1], [x*1, x*1, x*-1], [x*-1, x*1, x*-1], [x*-1, x*-1, x*-1]]
+    V["position"] = [
+        [x * 1, x * 1, x * 1],
+        [x * -1, x * 1, x * 1],
+        [x * -1, x * -1, x * 1],
+        [x * 1, x * -1, x * 1],
+        [x * 1, x * -1, x * -1],
+        [x * 1, x * 1, x * -1],
+        [x * -1, x * 1, x * -1],
+        [x * -1, x * -1, x * -1],
+    ]
     V = V.view(gloo.VertexBuffer)
-    
-    I = np.array([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 1,
-                  1, 6, 7, 1, 7, 2, 7, 4, 3, 7, 3, 2, 4, 7, 6, 4, 6, 5], dtype=np.uint32)
+
+    I = np.array(
+        [
+            0,
+            1,
+            2,
+            0,
+            2,
+            3,
+            0,
+            3,
+            4,
+            0,
+            4,
+            5,
+            0,
+            5,
+            6,
+            0,
+            6,
+            1,
+            1,
+            6,
+            7,
+            1,
+            7,
+            2,
+            7,
+            4,
+            3,
+            7,
+            3,
+            2,
+            4,
+            7,
+            6,
+            4,
+            6,
+            5,
+        ],
+        dtype=np.uint32,
+    )
     I = I.view(gloo.IndexBuffer)
 
     # Index buffer for object edges
-    O = np.array([0,1, 1,2, 2,3, 3,0,
-     4,7, 7,6, 6,5, 5,4,
-     0,5, 1,6, 2,7, 3,4 ], dtype=np.uint32)
+    O = np.array(
+        [0, 1, 1, 2, 2, 3, 3, 0, 4, 7, 7, 6, 6, 5, 5, 4, 0, 5, 1, 6, 2, 7, 3, 4],
+        dtype=np.uint32,
+    )
     O = O.view(gloo.IndexBuffer)
-
 
     for iterator in range(4):
         cube = gloo.Program(vertex, fragment)
         cube.bind(V)
-        cube['model'] = np.eye(4, dtype=np.float32)
-        cube['view'] = glm.translation(0, 0, -30)
+        cube["model"] = np.eye(4, dtype=np.float32)
+        cube["view"] = glm.translation(0, 0, -30)
         bag[iterator] = cube
-    
-    # Define vertex for background texture and index buffer 
+
+    # Define vertex for background texture and index buffer
     global quad
     quad = gloo.Program(vertex2, fragment2, count=4)
-    quad['position'] = [(-1, -1, 0), (-1, +1, 0), (+1, -1, 0), (+1, +1, 0)]
-    quad['texcoord'] = [(0, 1), (0, 0), (1, 1), (1, 0)]
-    quad['texture'] = initial_image[..., ::-1]
+    quad["position"] = [(-1, -1, 0), (-1, +1, 0), (+1, -1, 0), (+1, +1, 0)]
+    quad["texcoord"] = [(0, 1), (0, 0), (1, 1), (1, 0)]
+    quad["texture"] = initial_image[..., ::-1]
 
     global path
-    path = gloo.Program(vertex3, fragment, count=4*25*2)
+    path = gloo.Program(vertex3, fragment, count=4 * 25 * 2)
 
     # Initialise the vertex buffers for path
-    path['position'] = np.zeros((4*25*2, 3))
-    path['last_position'] = np.zeros((4*25*2, 3))
-    path['side'] = np.zeros(4*25*2)
+    path["position"] = np.zeros((4 * 25 * 2, 3))
+    path["last_position"] = np.zeros((4 * 25 * 2, 3))
+    path["side"] = np.zeros(4 * 25 * 2)
 
     # Color of path
-    path['u_color'] = 0, 0.5, 0
+    path["u_color"] = 0, 0.5, 0
 
-    # Define the Index Buffer for edges of the augmented reality path. 
+    # Define the Index Buffer for edges of the augmented reality path.
     bline_I = list()
     bline_I += [2, 3]
-    for i in range(2, 4*25*2-2, 2):
-        bline_I += [i, i+2]
-        bline_I += [i+1, i+3]
+    for i in range(2, 4 * 25 * 2 - 2, 2):
+        bline_I += [i, i + 2]
+        bline_I += [i + 1, i + 3]
     bline_I = np.array(bline_I, dtype=np.uint32)
     bline_I = bline_I.view(gloo.IndexBuffer)
 
@@ -349,18 +409,18 @@ def opengl():
             gl.glDisable(gl.GL_DEPTH_TEST)
 
             quad.draw(gl.GL_TRIANGLE_STRIP)
-            
+
             # R-enable depth
             gl.glEnable(gl.GL_DEPTH_TEST)
-            
+
             # Color of path
-            path['u_color'] = 0, 1, 1
+            path["u_color"] = 0, 1, 1
             # Filled path
             path.draw(gl.GL_TRIANGLE_STRIP)
-            # Mask depth 
+            # Mask depth
             gl.glDepthMask(gl.GL_FALSE)
             # Color of edge lines of path
-            path['u_color'] = 0, 0, 0
+            path["u_color"] = 0, 0, 0
             # Width of edge lines
             gl.glLineWidth(10.0)
             # Draw edge lines with index buffer bline_I
@@ -375,7 +435,7 @@ def opengl():
             glm.rotate(model, phi, 0, 1, 0)
 
             for obj in bag.values():
-                obj['u_color'] = 1, 0, 0
+                obj["u_color"] = 1, 0, 0
 
                 # Filled cube
                 obj.draw(gl.GL_TRIANGLES, I)
@@ -383,15 +443,14 @@ def opengl():
                 # Another method to disable depth, instead of disabling it, mask it
                 gl.glDepthMask(gl.GL_FALSE)
                 # Black color for edge lines of cube
-                obj['u_color'] = 0, 0, 0
+                obj["u_color"] = 0, 0, 0
                 # Draw the edge lines with the given index buffer
                 obj.draw(gl.GL_LINES, O)
-                # Unmask OpenGL depth aparamter 
+                # Unmask OpenGL depth aparamter
                 gl.glDepthMask(gl.GL_TRUE)
-                
-                # Model matrix is used to define orientation ,in this case, used to rotate cube
-                obj['model'] = model
 
+                # Model matrix is used to define orientation ,in this case, used to rotate cube
+                obj["model"] = model
 
             # Update cube rotations
             theta += 2.0  # degrees
@@ -399,19 +458,17 @@ def opengl():
         finally:
             lock.release()
 
-
-
     @window.event
     def on_resize(width, height):
 
         # Redefine projection matrix from OpenCV style to OpenGL style
-        # OpenCV defines 3d image from left top corner as (0,0,0) and x and y increase towards right and down respectively. 
+        # OpenCV defines 3d image from left top corner as (0,0,0) and x and y increase towards right and down respectively.
         # z increases positively outwards
         # OpenGL defines 3d image from center as (0,0,0)  and x and y increase towards right and up respectiively.
-        # z increases negatively outwards 
+        # z increases negatively outwards
         # Clipping (1m - 30m)
         # Source - https://blog.noctua-software.com/opencv-opengl-projection-matrix.html
-        view_matrix = np.zeros((4,4))
+        view_matrix = np.zeros((4, 4))
         view_matrix[0][0] = 2.0 * projection_matrix[0] / img_width
         view_matrix[1][1] = -2.0 * projection_matrix[5] / img_height
 
@@ -423,12 +480,12 @@ def opengl():
         view_matrix[3][2] = 2.0 * 30 * 1 / (1 - 30)
 
         for obj in bag.values():
-            obj['projection'] = view_matrix
+            obj["projection"] = view_matrix
 
         # Use same projection amtrix for path but redefine clipping to (0.01m - 30m)
         view_matrix[2][2] = (30 + 0.01) / float(0.01 - 30)
         view_matrix[3][2] = 2.0 * 30 * 0.01 / (0.01 - 30)
-        path['projection'] = view_matrix
+        path["projection"] = view_matrix
 
     @window.event
     def on_init():
@@ -437,5 +494,5 @@ def opengl():
     app.run(framerate=30)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     listener()

@@ -1,19 +1,18 @@
 #!/usr/bin/env python
-from threading import Thread, Lock
+import math
+from threading import Lock, Thread
+
+import image_geometry as ig
+import numpy as np
 import rospy
-from sensor_msgs.msg import Image, CameraInfo
+import tf
 import tf2_ros
 from cv_bridge import CvBridge, CvBridgeError
-import image_geometry as ig
+from scipy import interpolate
+from sensor_msgs.msg import CameraInfo, Image
+from tf.transformations import euler_from_quaternion
 
 from glumpy import app, gl, glm, gloo
-import numpy as np
-from scipy import interpolate
-from tf.transformations import euler_from_quaternion
-import math
-import tf
-
-# colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
 
 # Default height and width of window.
 img_height = 512
@@ -23,6 +22,12 @@ img_width = 512
 phi, theta = 40, 30
 
 bag = dict()
+
+NUM_POINTS = 100
+
+position = np.zeros((2 * NUM_POINTS,3))
+last_position = np.zeros((2 * NUM_POINTS, 3))
+side = np.zeros(2 * NUM_POINTS)
 
 # Global Lock used for Threads. Two vital threads work side by side in this program. The main thread runs the ROS node
 # while a secondary thread renders the camera feed overlaid by 3d objects using OpenGL. The reason why the ros node is
@@ -66,109 +71,99 @@ class Server:
 
     def callback_camera(self, camera_feed):
 
-        global path, lock, quad
+        global bag, path, lock, quad, position, last_position, side
 
         lock.acquire()
         try:
-            quad['texture'] = self.bridge.imgmsg_to_cv2(camera_feed)[..., ::-1]
+            quad["texture"] = self.bridge.imgmsg_to_cv2(camera_feed)[..., ::-1]
         except:
             return
         finally:
             lock.release()
 
+        transforms = np.zeros((len(bag), 3))
 
-        transforms = np.zeros((len(bag),3))
-
-        trans_glob = self.tfBuffer.lookup_transform('camera', 'world', rospy.Time())
+        trans_glob = self.tfBuffer.lookup_transform("camera", "world", rospy.Time())
         t = trans_glob.transform.translation
         r = trans_glob.transform.rotation
-        matrix = self.transformer.fromTranslationRotation((t.x, t.y, t.z), (r.x, r.y, r.z, r.w))
-
+        matrix = self.transformer.fromTranslationRotation(
+            (t.x, t.y, t.z), (r.x, r.y, r.z, r.w)
+        )
 
         for i in range(len(bag)):
             try:
-                trans = self.tfBuffer.lookup_transform('world', 'object%s' % str(i), rospy.Time())
-                transforms[i] = [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z]
-            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                trans = self.tfBuffer.lookup_transform(
+                    "world", "object%s" % str(i), rospy.Time()
+                )
+                transforms[i] = [
+                    trans.transform.translation.x,
+                    trans.transform.translation.y,
+                    trans.transform.translation.z,
+                ]
+            except (
+                tf2_ros.LookupException,
+                tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException,
+            ):
                 return
 
             lock.acquire()
 
             try:
-                cam = self.tfBuffer.lookup_transform('camera', 'object%s' % str(i), rospy.Time())
-                # values = matrix.dot(np.array([cam.transform.translation.x, 
-                # cam.transform.translation.y, 
+                cam = self.tfBuffer.lookup_transform(
+                    "camera", "object%s" % str(i), rospy.Time()
+                )
+                # values = matrix.dot(np.array([cam.transform.translation.x,
+                # cam.transform.translation.y,
                 # cam.transform.translation.z, 1]))
 
-                bag[i]['view'] = glm.translation(-cam.transform.translation.y, 
-                                                 -cam.transform.translation.z, 
-                                                 -cam.transform.translation.x)
+                bag[i]["view"] = glm.translation(
+                    -cam.transform.translation.y,
+                    -cam.transform.translation.z,
+                    -cam.transform.translation.x,
+                )
             except:
                 return
             finally:
                 lock.release()
 
-        tck,_=interpolate.splprep(transforms.T,s=0.0)
+        tck, _ = interpolate.splprep(transforms.T, s=0.0)
 
-        bez_x,bez_y,bez_z = np.array(interpolate.splev(np.linspace(0,1,25*4),tck))
+        bez_x, bez_y, bez_z = np.array(
+            interpolate.splev(np.linspace(0, 1, 25 * 4), tck)
+        )
 
-        position = list()
-        last_position = list()
-        side = list()
 
-        position.append([bez_x[1], bez_y[1], bez_z[1] -0.8])
-        position.append([bez_x[1], bez_y[1], bez_z[1] - 0.8])
-        last_position.append([bez_x[1], bez_y[1], bez_z[1] - 0.8])
-        last_position.append([bez_x[1], bez_y[1], bez_z[1] - 0.8])
-        side += [-1.0, 1.0]
+        position[0] = [bez_x[1], bez_y[1], bez_z[1] - 0.8]
+        position[1] = [bez_x[1], bez_y[1], bez_z[1] - 0.8]
+        last_position[0] = [bez_x[1], bez_y[1], bez_z[1] - 0.8]
+        last_position[1] = [bez_x[1], bez_y[1], bez_z[1] - 0.8]
+        side[:2] = [-1.0, 1.0]
 
-        #remember to chaneg values
+        # remember to chaneg values
         for i in range(1, len(bez_x)):
-            position.append([bez_x[i], bez_y[i], bez_z[i] - 0.8])
-            position.append([bez_x[i], bez_y[i], bez_z[i] - 0.8])
+            position[2*i] = [bez_x[i], bez_y[i], bez_z[i] - 0.8]
+            position[2*i + 1] = [bez_x[i], bez_y[i], bez_z[i] - 0.8]
 
-            last_position.append([bez_x[i - 1], bez_y[i-1], bez_z[i - 1] - 0.8])
-            last_position.append([bez_x[i - 1], bez_y[i-1], bez_z[i - 1] - 0.8])
+            last_position[2*i] = [bez_x[i - 1], bez_y[i - 1], bez_z[i - 1] - 0.8]
+            last_position[2*i + 1] = [bez_x[i - 1], bez_y[i - 1], bez_z[i - 1] - 0.8]
 
-            side += [-1.0, 1.0]
+            side[2*i:2*(i + 1)] = [-1.0, 1.0]
 
         lock.acquire()
         try:
-            path['inv_transform'] = matrix.T
-            path['position'] = position
-            path['last_position'] = last_position
-            path['side'] = side
+            path["inv_transform"] = matrix.T
+            path["position"] = position
+            path["last_position"] = last_position
+            path["side"] = side
         except:
             return
         finally:
             lock.release()
 
 
-            # pixel_coord = self.drone_camera.project3dToPixel((-trans.transform.translation.y,
-            #                                                   -trans.transform.translation.z,
-            #                                                   trans.transform.translation.x))
-
-            # if trans.transform.translation.x >= 0 and pixel_coord:
-            
-            # else:
-            #     lock.acquire()
-            #     try:
-            #         bag[i]['view'] = glm.translation(0, 0, 10.0)
-            #     finally:
-            #         lock.release()
-                # to_draw_new.add(bag[i])
-                # cv_image = cv.circle(cv_image, (int(pixel_coord[0]), int(pixel_coord[1])), 3, colors[i], 3)
-                # print("Printed circle at " + str(trans.transform.translation.x) + ", " + str(
-                # trans.transform.translation.y), pixel_coord[0], pixel_coord[1])
-            # print (pixel_coord[0], pixel_coord[1])
-
-        # rospy.loginfo(cv_image)
-        # cv.imshow('Drone_camera', cv_image)
-        # cv.waitKey(1)
-
-
 def listener():
-    rospy.init_node('image_reformat', anonymous=True)
+    rospy.init_node("image_reformat", anonymous=True)
     server = Server()
 
     camera_info = rospy.wait_for_message("ardrone/front/camera_info", CameraInfo)
@@ -187,7 +182,7 @@ def listener():
 
 
 def opengl():
-    # colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]        
+    # colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
 
     vertex = """
     uniform mat4   model;         // Model matrix
@@ -282,53 +277,101 @@ def opengl():
 
     x = 0.1
     V = np.zeros(8, [("position", np.float32, 3)])
-    V["position"] = [[x*1, x*1, x*1], [x*-1, x*1, x*1], [x*-1, x*-1, x*1], [x*1, x*-1, x*1],
-                     [x*1, x*-1, x*-1], [x*1, x*1, x*-1], [x*-1, x*1, x*-1], [x*-1, x*-1, x*-1]]
+    V["position"] = [
+        [x * 1, x * 1, x * 1],
+        [x * -1, x * 1, x * 1],
+        [x * -1, x * -1, x * 1],
+        [x * 1, x * -1, x * 1],
+        [x * 1, x * -1, x * -1],
+        [x * 1, x * 1, x * -1],
+        [x * -1, x * 1, x * -1],
+        [x * -1, x * -1, x * -1],
+    ]
     V = V.view(gloo.VertexBuffer)
-    
-    I = np.array([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 6, 1,
-                  1, 6, 7, 1, 7, 2, 7, 4, 3, 7, 3, 2, 4, 7, 6, 4, 6, 5], dtype=np.uint32)
+
+    I = np.array(
+        [
+            0,
+            1,
+            2,
+            0,
+            2,
+            3,
+            0,
+            3,
+            4,
+            0,
+            4,
+            5,
+            0,
+            5,
+            6,
+            0,
+            6,
+            1,
+            1,
+            6,
+            7,
+            1,
+            7,
+            2,
+            7,
+            4,
+            3,
+            7,
+            3,
+            2,
+            4,
+            7,
+            6,
+            4,
+            6,
+            5,
+        ],
+        dtype=np.uint32,
+    )
     I = I.view(gloo.IndexBuffer)
 
     bezier_I = list()
-    for i in range(4*25*2-2):
-        bezier_I += [i, i+1, i+2]
+    for i in range(4 * 25 * 2 - 2):
+        bezier_I += [i, i + 1, i + 2]
     bezier_I = np.array(bezier_I, dtype=np.uint32)
     bezier_I.view(gloo.IndexBuffer)
 
     bline_I = list()
     bline_I += [2, 3]
-    for i in range(2, 4*25*2-2, 2):
-        bline_I += [i, i+2]
-        bline_I += [i+1, i+3]
+    for i in range(2, 4 * 25 * 2 - 2, 2):
+        bline_I += [i, i + 2]
+        bline_I += [i + 1, i + 3]
 
     bline_I = np.array(bline_I, dtype=np.uint32)
     bline_I = bline_I.view(gloo.IndexBuffer)
 
-    O = np.array([0,1, 1,2, 2,3, 3,0,
-     4,7, 7,6, 6,5, 5,4,
-     0,5, 1,6, 2,7, 3,4 ], dtype=np.uint32)
+    O = np.array(
+        [0, 1, 1, 2, 2, 3, 3, 0, 4, 7, 7, 6, 6, 5, 5, 4, 0, 5, 1, 6, 2, 7, 3, 4],
+        dtype=np.uint32,
+    )
     O = O.view(gloo.IndexBuffer)
 
     for iterator in range(4):
         cube = gloo.Program(vertex, fragment)
         cube.bind(V)
-        cube['model'] = np.eye(4, dtype=np.float32)
-        cube['view'] = glm.translation(0, 0, -30)
+        cube["model"] = np.eye(4, dtype=np.float32)
+        cube["view"] = glm.translation(0, 0, -30)
         bag[iterator] = cube
 
     global quad
     quad = gloo.Program(vertex2, fragment2, count=4)
-    quad['position'] = [(-1, -1, 0), (-1, +1, 0), (+1, -1, 0), (+1, +1, 0)]
-    quad['texcoord'] = [(0, 1), (0, 0), (1, 1), (1, 0)]
-    quad['texture'] = initial_image[..., ::-1]
+    quad["position"] = [(-1, -1, 0), (-1, +1, 0), (+1, -1, 0), (+1, +1, 0)]
+    quad["texcoord"] = [(0, 1), (0, 0), (1, 1), (1, 0)]
+    quad["texture"] = initial_image[..., ::-1]
 
     global path
-    path = gloo.Program(vertex3, fragment, count=4*25*2)
-    path['position'] = np.zeros((4*25*2, 3))
-    path['last_position'] = np.zeros((4*25*2, 3))
-    path['side'] = np.zeros(4*25*2)
-    path['u_color'] = 0, 0.5, 0
+    path = gloo.Program(vertex3, fragment, count=4 * 25 * 2)
+    path["position"] = np.zeros((4 * 25 * 2, 3))
+    path["last_position"] = np.zeros((4 * 25 * 2, 3))
+    path["side"] = np.zeros(4 * 25 * 2)
+    path["u_color"] = 0, 0.5, 0
 
     window = app.Window(width=img_width, height=img_height, color=(1, 1, 1, 1))
 
@@ -351,10 +394,10 @@ def opengl():
             gl.glEnable(gl.GL_DEPTH_TEST)
             # Filled cube
 
-            path['u_color'] = 0, 1, 1
+            path["u_color"] = 0, 1, 1
             path.draw(gl.GL_TRIANGLE_STRIP)
             gl.glDepthMask(gl.GL_FALSE)
-            path['u_color'] = 0, 0, 0
+            path["u_color"] = 0, 0, 0
             gl.glLineWidth(7.5)
             path.draw(gl.GL_LINES, bline_I)
             gl.glLineWidth(1.0)
@@ -365,15 +408,15 @@ def opengl():
             glm.rotate(model, phi, 0, 1, 0)
 
             for obj in bag.values():
-                obj['u_color'] = 1, 0, 0
+                obj["u_color"] = 1, 0, 0
                 obj.draw(gl.GL_TRIANGLES, I)
 
                 gl.glDepthMask(gl.GL_FALSE)
-                obj['u_color'] = 0, 0, 0
+                obj["u_color"] = 0, 0, 0
                 obj.draw(gl.GL_LINES, O)
                 gl.glDepthMask(gl.GL_TRUE)
 
-                obj['model'] = model
+                obj["model"] = model
 
             # cube.draw(gl.GL_TRIANGLES, I)
 
@@ -383,11 +426,9 @@ def opengl():
         finally:
             lock.release()
 
-
-
     @window.event
     def on_resize(width, height):
-        view_matrix = np.zeros((4,4))
+        view_matrix = np.zeros((4, 4))
         view_matrix[0][0] = 2.0 * projection_matrix[0] / img_width
         view_matrix[1][1] = -2.0 * projection_matrix[5] / img_height
 
@@ -399,11 +440,11 @@ def opengl():
         view_matrix[3][2] = 2.0 * 30 * 1 / (1 - 30)
 
         for obj in bag.values():
-            obj['projection'] = view_matrix
+            obj["projection"] = view_matrix
 
         view_matrix[2][2] = (30 + 0.01) / float(0.01 - 30)
         view_matrix[3][2] = 2.0 * 30 * 0.01 / (0.01 - 30)
-        path['projection'] = view_matrix
+        path["projection"] = view_matrix
         # print(glm.perspective(45.0, width / float(height), 2.0, 100.0))
 
     @window.event
@@ -413,5 +454,5 @@ def opengl():
     app.run(framerate=30)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     listener()

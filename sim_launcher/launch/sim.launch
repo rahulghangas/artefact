@@ -1,6 +1,9 @@
-<launch>
-
-  <include file="$(find cvg_sim_gazebo)/launch/ardrone_testworld.launch">
+<?xml version="1.0"?>
+<launch>  
+  <arg name="gui" default="true"/>
+  
+  <include file="$(find cvg_sim_gazebo)/launch/ardrone_testworld.launch" >
+    <arg name="gui" value="$(arg gui)"/>
   </include>
 
   <include file="$(find ardrone_joystick)/launch/teleop.launch">

@@ -1,12 +1,13 @@
 #!/usr/bin/env python
+import geometry_msgs.msg
 import rospy
 import tf2_ros
-import geometry_msgs.msg
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 
 br = tf2_ros.TransformBroadcaster()
 t = geometry_msgs.msg.TransformStamped()
+
 
 def init_transform(initial_position):
     t.header.frame_id = "world"
@@ -19,14 +20,15 @@ def init_transform(initial_position):
 
 def callback_position(position):
     global t
-    
+
     t.header.stamp = rospy.Time.now()
     t.transform.translation.x = position.pose.pose.position.x
     t.transform.translation.y = position.pose.pose.position.y
     t.transform.translation.z = 0
 
+
 def callback_rotation(rotation):
-    global br, t    
+    global br, t
 
     t.transform.rotation.x = rotation.orientation.x
     t.transform.rotation.y = rotation.orientation.y
@@ -38,13 +40,13 @@ def callback_rotation(rotation):
 
 
 def camera_pose_node():
-    rospy.init_node('camera_pose')
+    rospy.init_node("camera_pose")
 
     initial_position = rospy.wait_for_message("/ground_truth/state", Odometry)
-    init_transform(initial_position)    
+    init_transform(initial_position)
 
-    rospy.Subscriber('/ground_truth/state', Odometry, callback_position)
-    rospy.Subscriber('/ardrone/imu', Imu, callback_rotation)
+    rospy.Subscriber("/ground_truth/state", Odometry, callback_position)
+    rospy.Subscriber("/ardrone/imu", Imu, callback_rotation)
 
     try:
         rospy.spin()
@@ -52,7 +54,7 @@ def camera_pose_node():
         pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         camera_pose_node()
     except rospy.ROSInterruptException:
